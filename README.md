@@ -1,116 +1,124 @@
 # Event Storm
 
-Aplicação desktop em Go, construída com [Fyne](https://fyne.io), para facilitar
-sessões de **Event Storming**: organização de eventos, comandos, agregados,
-políticas, atores e demais elementos em um quadro visual.
+Aplicação web para criação de fluxos de **Event Storming** com post-its arrastáveis,
+organização por projetos e dashboards, persistência em SQLite e exportação em SVG.
 
-## Funcionalidades
+Construída com **Nuxt 3**, **TypeScript** e **Tailwind CSS**. Todo o estilo é
+aplicado via classes utilitárias Tailwind diretamente nas tags — nenhum CSS
+customizado é escrito (o único arquivo CSS é `assets/css/tailwind.css`, contendo
+apenas as três diretivas `@tailwind`).
 
-- **Projetos** agrupam múltiplos dashboards (um por bounded context, fluxo, etc.).
-- **Dashboards** são quadros editáveis onde você desenha o fluxo Event Storming.
-- **Painel lateral** com a paleta clássica de post-its (Evento, Comando, Ator,
-  Agregado, Sistema Externo, Política, Read Model, Hotspot, Informação) — clique
-  para adicionar ao quadro.
-- **Edição visual**: arraste post-its livremente, clique para editar a descrição
-  ou trocar o tipo.
-- **Persistência local** em SQLite (`event-storm.db`).
-- **Exportação SVG** do dashboard com cores, textos e layout preservados.
+## Recursos
 
-## Pré-requisitos
+- **Projetos**: agrupam um conjunto de dashboards relacionados.
+- **Dashboards**: o quadro onde o fluxo de Event Storm é desenhado.
+- **Painel lateral de post-its** com os tipos clássicos do Event Storming
+  (Evento de Domínio, Comando, Ator, Agregado, Política, Read Model, Sistema Externo, Hot Spot).
+- **Drag & drop** do painel para o quadro e arraste livre dentro do quadro.
+- **Edição** de título e descrição de cada post-it (duplo clique abre o editor).
+- **Persistência** em arquivo SQLite (`./data/event-storm.db` por padrão).
+- **Exportação em SVG** do dashboard com um clique.
 
-- **Go 1.25+**
-- **Toolchain CGO** (o Fyne usa GLFW/OpenGL via CGO).
-  - Linux (Ubuntu/Debian/WSL):
+## Requisitos
 
-    ```bash
-    sudo apt update
-    sudo apt install -y gcc pkg-config libgl1-mesa-dev xorg-dev \
-        libxkbcommon-dev libxcursor-dev libxrandr-dev libxinerama-dev \
-        libxi-dev libwayland-dev
-    ```
+- Node.js 22+ (o repositório inclui um `.nvmrc`; rode `nvm use` para alinhar)
+- npm 10+ (ou pnpm/yarn equivalentes)
+- Compilador C++ disponível como fallback para `better-sqlite3` (na maioria dos casos
+  o pacote baixa um prebuild compatível)
 
-  - macOS: instale o Xcode Command Line Tools (`xcode-select --install`).
-  - Windows: instale MinGW-w64 ou MSYS2.
-
-## Como executar
+## Rodando localmente
 
 ```bash
-git clone <repo>
-cd event-storm
-go mod tidy
-go run .
+npm install
+npm run dev
 ```
 
-O banco de dados é criado automaticamente em
-`$XDG_CONFIG_HOME/event-storm/event-storm.db` (Linux),
-`~/Library/Application Support/event-storm/event-storm.db` (macOS) ou
-`%AppData%\event-storm\event-storm.db` (Windows).
+A aplicação ficará disponível em `http://localhost:3000`.
 
-Você pode sobrescrever o caminho via variável de ambiente:
+O banco SQLite é criado automaticamente em `./data/event-storm.db`. Você pode
+sobrescrever esse caminho com a variável de ambiente `NUXT_DB_PATH`:
 
 ```bash
-EVENT_STORM_DB=/tmp/storm.db go run .
+NUXT_DB_PATH=/caminho/para/event-storm.db npm run dev
 ```
 
 ## Build de produção
 
 ```bash
-go build -o event-storm .
-./event-storm
+npm run build
+npm run start
 ```
 
-Ou empacotamento nativo via Fyne CLI (opcional):
+## Docker
+
+Para executar via Docker:
 
 ```bash
-go install fyne.io/tools/cmd/fyne@latest
-fyne package -os linux  # ou darwin / windows
+docker build -t event-storm .
+docker run --rm -p 3000:3000 -v "$(pwd)/data:/app/data" event-storm
 ```
 
-## Estrutura do projeto
+O volume `-v "$(pwd)/data:/app/data"` garante que o banco SQLite sobreviva
+entre execuções do container.
 
-```
-event-storm/
-├── main.go                 # Bootstrap (configura DB e dispara a UI)
-├── internal/
-│   ├── domain/             # Entidades Project, Dashboard, PostIt + paleta de tipos
-│   ├── storage/            # Repositório SQLite (modernc.org/sqlite, sem CGO)
-│   ├── export/             # Renderização SVG do dashboard
-│   └── ui/                 # Telas Fyne (projetos, dashboards, editor) e widget de post-it
-└── README.md
-```
-
-A camada `domain` é pura — sem dependências de Fyne ou SQLite — e descreve a
-paleta de cores Event Storming canônica.
-
-## Atalhos no editor
-
-| Ação                       | Como fazer                                 |
-| -------------------------- | ------------------------------------------ |
-| Adicionar post-it          | Clique no item desejado da paleta lateral. |
-| Mover post-it              | Clique e arraste o post-it.                |
-| Editar descrição / tipo    | Clique uma vez no post-it.                 |
-| Remover post-it            | Clique no post-it → "Remover post-it".     |
-| Navegar pelo quadro        | Use as barras de rolagem.                  |
-| Exportar dashboard em SVG  | Botão "Exportar SVG" no topo do editor.    |
-
-## Testes
+O `Dockerfile` usa um entrypoint que ajusta automaticamente o owner do diretório
+montado para o usuário não-root `nuxt` (UID 1001) antes de iniciar o servidor,
+então o bind mount funciona mesmo quando o diretório no host pertence a outro
+UID. Os arquivos `event-storm.db*` no host ficarão pertencendo ao UID 1001 — se
+precisar removê-los do host, rode:
 
 ```bash
-go test ./internal/domain/... ./internal/storage/... ./internal/export/...
+docker run --rm -v "$(pwd)/data:/data" alpine sh -c 'rm -rf /data/*'
 ```
 
-Os pacotes não-UI rodam sem CGO. Testes de UI exigem o ambiente gráfico do Fyne.
+Como alternativa, use um named volume e deixe o Docker gerenciar permissões:
 
-## Paleta Event Storming utilizada
+```bash
+docker run --rm -p 3000:3000 -v event-storm-data:/app/data event-storm
+```
 
-| Tipo            | Cor         | Significado                                            |
-| --------------- | ----------- | ------------------------------------------------------ |
-| Evento          | Laranja     | Fato relevante que aconteceu (passado).                |
-| Comando         | Azul        | Intenção que dispara um evento.                        |
-| Ator            | Amarelo     | Pessoa ou papel que emite comandos.                    |
-| Agregado        | Amarelo-pal | Entidade do domínio que mantém invariantes.            |
-| Sistema Externo | Rosa        | Sistema de terceiros que participa do fluxo.           |
-| Política        | Roxo        | Regra reativa ("quando X acontecer, faça Y").          |
-| Read Model      | Verde       | Visão/projeção usada para tomar decisões.              |
-| Hotspot         | Vermelho    | Risco, dúvida ou ponto de atenção.                     |
-| Informação      | Branco      | Nota, contexto ou referência.                          |
+## Estrutura de pastas
+
+```
+.
+├── app.vue                    # Layout raiz
+├── assets/css/tailwind.css    # Diretivas @tailwind (único arquivo CSS)
+├── components/                # PostItPanel, PostItNote, PostItEditor, DashboardCanvas
+├── composables/               # usePostItTypes, useDashboardExport
+├── pages/                     # index, projects/[id], dashboards/[id]
+├── server/api/                # Endpoints REST (projects, dashboards, postits)
+├── server/utils/db.ts         # Conexão e migrations SQLite
+├── types/                     # Interfaces TypeScript do domínio
+├── tailwind.config.cjs        # Tema e content paths do Tailwind
+├── Dockerfile
+└── nuxt.config.ts
+```
+
+## API REST
+
+| Método | Rota                                   | Descrição                              |
+| ------ | -------------------------------------- | -------------------------------------- |
+| GET    | `/api/projects`                        | Lista projetos                         |
+| POST   | `/api/projects`                        | Cria projeto                           |
+| GET    | `/api/projects/:id`                    | Detalhe do projeto                     |
+| PUT    | `/api/projects/:id`                    | Atualiza projeto                       |
+| DELETE | `/api/projects/:id`                    | Remove projeto (cascade em dashboards) |
+| GET    | `/api/projects/:id/dashboards`         | Lista dashboards do projeto            |
+| POST   | `/api/dashboards`                      | Cria dashboard                         |
+| GET    | `/api/dashboards/:id`                  | Detalhe do dashboard                   |
+| PUT    | `/api/dashboards/:id`                  | Atualiza dashboard                     |
+| DELETE | `/api/dashboards/:id`                  | Remove dashboard                       |
+| GET    | `/api/dashboards/:id/postits`          | Lista post-its do dashboard            |
+| POST   | `/api/postits`                         | Cria post-it                           |
+| PUT    | `/api/postits/:id`                     | Atualiza post-it (texto e/ou posição)  |
+| DELETE | `/api/postits/:id`                     | Remove post-it                         |
+
+## Como usar
+
+1. Crie um **projeto** na tela inicial.
+2. Dentro do projeto, crie um **dashboard**.
+3. No editor do dashboard, **arraste** um post-it do painel da esquerda para o quadro.
+4. **Clique duas vezes** em qualquer post-it para abrir o editor lateral e
+   adicionar título e descrição.
+5. **Arraste** os post-its livremente para organizar o fluxo.
+6. Use o botão **Exportar SVG** para baixar o dashboard como imagem vetorial.
